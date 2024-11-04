@@ -1,0 +1,6 @@
+git+https://github.com/sarperavci/CloudflareBypassForScraping.git@main
+fastapi
+pydantic
+python-json-logger
+PyVirtualDisplay
+uvicorn
