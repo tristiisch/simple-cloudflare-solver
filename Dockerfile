@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install necessary packages for Xvfb and pyvirtualdisplay
 RUN apt-get update && \
     apt-get install -y \
+    git \
     chromium \
     gnupg \
     ca-certificates \
