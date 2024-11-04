@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    command: ["python", "src/server.py", "--debug"]
     environment:
       - LANG=fr_FR
     ports:
