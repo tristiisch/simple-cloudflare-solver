@@ -7,17 +7,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pythonjsonlogger import jsonlogger
 import argparse
-import logging 
+import logging
 
-logger = logging.root
-# formatter = jsonlogger.JsonFormatter()
-logHandler = logging.StreamHandler
-# logHandler.setFormatter(formatter)
-logger.handlers = [logHandler]
-
-app = FastAPI()
-log = False
 log_level = logging.INFO
+app = FastAPI()
 
 # Pydantic model for the response
 class ClientRequest(BaseModel):
@@ -54,7 +47,7 @@ def is_safe_url(url: str) -> bool:
 
 
 # Function to bypass Cloudflare protection
-def bypass_cloudflare(url: str, retries: int, log: bool) -> ChromiumPage:
+def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
     logger.info("Configuring ChromiumPage", extra={'requestUrl': url})
     options = ChromiumOptions()
     options.set_paths(browser_path="/usr/bin/chromium-browser").headless(False).auto_port()
@@ -84,7 +77,7 @@ async def get_solverr(request: ClientRequest):
         raise HTTPException(status_code=400, detail="Invalid URL")
     try:
         if request.cmd == "request.get":
-            logger.info("Trying to solve", extra={'requestUrl': request.url})
+            logger.info("Trying to solve", extra={'request': request})
 
             # Start Xvfb for Docker
             logger.debug("Start VirtualDisplay", extra={'requestUrl': request.url})
@@ -93,7 +86,7 @@ async def get_solverr(request: ClientRequest):
 
             # Start bypass
             logger.debug("Start ByPassing", extra={'requestUrl': request.url})
-            page = bypass_cloudflare(request.url, 5, log)
+            page = bypass_cloudflare(request.url, 5)
             packet = page.listen.wait()
             page.listen.stop()
             cookies = page.cookies(as_dict=False)
@@ -125,13 +118,23 @@ async def get_solverr(request: ClientRequest):
 # Main entry point
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cloudflare bypass api")
-    parser.add_argument("--nolog", action="store_true", help="Disable logging")
+    parser.add_argument("--debug", action="store_true", help="Disable logging")
     parser.add_argument("--port", action="store_true", help="Port to bind service", default=8000)
 
     args = parser.parse_args()
-    if not args.nolog:
-        log = True
+    if args.debug:
         log_level = logging.DEBUG
+
+    # retrieve default logger
+    logger = logging.getLogger("root")
+    logHandler = logging.StreamHandler()
+    
+    # set Json formater
+    formatter = jsonlogger.JsonFormatter(timestamp=True)
+    logHandler.setFormatter(formatter)
+
+    # setup level and handlers to default logger
+    logger.handlers = [logHandler]
     logger.setLevel(log_level)
 
     import uvicorn

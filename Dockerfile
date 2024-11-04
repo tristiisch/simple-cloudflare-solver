@@ -1,5 +1,29 @@
 # Use the official Ubuntu image as the base image
-FROM python:3-slim-bookworm
+FROM python:3.13-slim-bookworm AS base
+
+# Set up a working directory
+WORKDIR /app
+
+# build stage
+FROM base AS builder
+
+RUN apt-get update && \
+    apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# install PDM
+RUN pip install -U pdm
+# disable update check
+ENV PDM_CHECK_UPDATE=false
+# copy files
+COPY pyproject.toml pdm.lock README.md /app/
+
+# install dependencies and project into the local packages directory
+RUN pdm install --check --prod --no-editable
+
+# run stage
+FROM base
 
 # Set environment variables to avoid interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,7 +31,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install necessary packages for Xvfb and pyvirtualdisplay
 RUN apt-get update && \
     apt-get install -y \
-    git \
     chromium \
     gnupg \
     ca-certificates \
@@ -30,18 +53,15 @@ RUN apt-get update && \
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up a working directory
-WORKDIR /app
-
-# Install Python dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# retrieve packages from build stage
+COPY --from=builder /app/.venv/ /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application files
-COPY . .
+COPY src src
 
 # Expose the port for the FastAPI server
 EXPOSE 8000
 
 # Default command
-CMD ["python", "server.py"]
+CMD ["python", "src/server.py"]
