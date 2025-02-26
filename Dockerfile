@@ -8,7 +8,7 @@ WORKDIR /app
 FROM base AS builder
 
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install --no-install-recommends -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,7 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install necessary packages for Xvfb and pyvirtualdisplay
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install --no-install-recommends -y \
     chromium \
     gnupg \
     ca-certificates \
