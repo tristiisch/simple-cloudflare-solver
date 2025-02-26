@@ -19,7 +19,7 @@
 
 ```bash
 curl -sSL https://pdm-project.org/install-pdm.py | python3 -
-pdm install --check --prod --no-editable
+pdm install --check --prod --no-editable
 ```
 
 ## Usage
