@@ -53,6 +53,7 @@ def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
     options.set_paths(browser_path="/usr/bin/chromium-browser").headless(False).auto_port()
     options.set_argument("--no-sandbox")  # Necessary for Docker
     options.set_argument("--disable-gpu")  # Optional, helps in some cases
+    options.set_argument("--accept-lang=en-US")  # Optional, set language
 
     page = ChromiumPage(addr_or_opts=options)
     try:
