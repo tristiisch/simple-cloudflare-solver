@@ -120,7 +120,7 @@ async def get_solverr(request: ClientRequest):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cloudflare bypass api")
     parser.add_argument("--debug", action="store_true", help="Disable logging")
-    parser.add_argument("--port", action="store_true", help="Port to bind service", default=8000)
+    parser.add_argument("--port", help="Port to bind service", default=8000)
 
     args = parser.parse_args()
     if args.debug:
