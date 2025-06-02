@@ -74,6 +74,8 @@ def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
 @app.post("/v1")
 async def get_solverr(request: ClientRequest):
     from pyvirtualdisplay import Display
+    display = None
+    page = None
     if not is_safe_url(request.url):
         raise HTTPException(status_code=400, detail="Invalid URL")
     try:
@@ -88,8 +90,10 @@ async def get_solverr(request: ClientRequest):
             # Start bypass
             logger.debug("Start ByPassing", extra={'requestUrl': request.url})
             page = bypass_cloudflare(request.url, 5)
-            packet = page.listen.wait()
-            page.listen.stop()
+            try:
+                packet = page.listen.wait()
+            finally:
+                page.listen.stop()
             cookies = page.cookies(as_dict=False)
 
             # Build response
@@ -103,17 +107,25 @@ async def get_solverr(request: ClientRequest):
                 cookies = cookies,
             )
 
-            logger.debug("Closing ChromiumPage and VirtualDisplay", extra={
-                'requestUrl': request.url, 
-                'response_url': packet.response.url
-            })
-            page.quit()
-            display.stop()  # Stop Xvfb
-
             return res
     except Exception as e:
         logger.error("An error occured while solving with error: %s", str(e), stack_info=True, extra={'requestUrl': request.url})
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if page:
+            try:
+                logger.debug("Quitting ChromiumPage", extra={'requestUrl': request.url})
+                page.quit()
+            except Exception as e:
+                logger.error("An error occured while quit page with error: %s", str(e), stack_info=True, extra={'requestUrl': request.url})
+                raise HTTPException(status_code=500, detail=str(e))
+        if display:
+            try:
+                logger.debug("Stopping VirtualDisplay", extra={'requestUrl': request.url})
+                display.stop()  # Stop Xvfb
+            except Exception as e:
+                logger.error("An error occured while stopping virtualDisplay with error: %s", str(e), stack_info=True, extra={'requestUrl': request.url})
+                raise HTTPException(status_code=500, detail=str(e))
 
 
 # Main entry point
