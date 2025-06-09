@@ -67,6 +67,7 @@ def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
         return page
     except Exception as e:
         page.listen.stop()
+        page.close()
         page.quit()
         raise e
 
@@ -115,6 +116,7 @@ async def get_solverr(request: ClientRequest):
         if page:
             try:
                 logger.debug("Quitting ChromiumPage", extra={'requestUrl': request.url})
+                page.close()
                 page.quit()
             except Exception as e:
                 logger.error("An error occured while quit page with error: %s", str(e), stack_info=True, extra={'requestUrl': request.url})
