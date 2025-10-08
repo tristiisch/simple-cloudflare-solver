@@ -1,5 +1,5 @@
 # Use the official Ubuntu image as the base image
-FROM python:3.13-slim-bookworm AS base
+FROM python:3.14-slim-bookworm AS base
 
 # Set up a working directory
 WORKDIR /app
