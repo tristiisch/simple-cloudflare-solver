@@ -100,7 +100,7 @@ def cleanup(page, browser_pid, display, request_url):
 
 
 # Function to bypass Cloudflare protection
-def bypass_cloudflare(url: str, retries: int):
+def bypass_cloudflare(url: str, retries: int) -> tuple[ChromiumPage, int | None]:
     logger.info("Configuring ChromiumPage", extra={'requestUrl': url})
     options = ChromiumOptions()
     options.set_paths(browser_path="/usr/bin/chromium-browser").headless(False).auto_port()
