@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
 
+import psutil
 from CloudflareBypasser import CloudflareBypasser
 from DrissionPage import ChromiumPage, ChromiumOptions
 from fastapi import FastAPI, HTTPException
@@ -46,8 +47,60 @@ def is_safe_url(url: str) -> bool:
     return True
 
 
+def kill_process_tree(pid, request_url):
+    """Force-kill a pid and all its children without going through CDP.
+
+    Backstop for page.quit(force=True): DrissionPage only reaches its own psutil kill
+    if a 'SystemInfo.getProcessInfo' CDP call succeeds, which it won't once the browser
+    connection is already broken. This never talks to the browser at all.
+    """
+    if pid is None:
+        return
+    try:
+        proc = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return
+
+    procs = proc.children(recursive=True) + [proc]
+    for p in procs:
+        try:
+            p.kill()
+        except psutil.NoSuchProcess:
+            pass
+        except Exception as e:
+            logger.error("Failed to force-kill leftover process %s: %s", getattr(p, "pid", "?"), str(e),
+                         extra={'requestUrl': request_url})
+    psutil.wait_procs(procs, timeout=5)
+
+
+def cleanup(page, browser_pid, display, request_url):
+    """Guaranteed teardown: each step is independent so one failure can't skip the rest.
+
+    Previous cleanup attempts (see PR #9) chained page.listen.stop()/page.quit()/
+    display.stop() so that an exception in an earlier call skipped the later ones --
+    including the one call that actually terminates the browser process.
+    """
+    if page is not None:
+        try:
+            page.listen.stop()
+        except Exception as e:
+            logger.error("Error stopping page.listen: %s", str(e), extra={'requestUrl': request_url})
+        try:
+            page.quit(force=True, timeout=10)
+        except Exception as e:
+            logger.error("Error in page.quit(): %s", str(e), extra={'requestUrl': request_url})
+
+    kill_process_tree(browser_pid, request_url)
+
+    if display is not None:
+        try:
+            display.stop()
+        except Exception as e:
+            logger.error("Error stopping VirtualDisplay: %s", str(e), extra={'requestUrl': request_url})
+
+
 # Function to bypass Cloudflare protection
-def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
+def bypass_cloudflare(url: str, retries: int):
     logger.info("Configuring ChromiumPage", extra={'requestUrl': url})
     options = ChromiumOptions()
     options.set_paths(browser_path="/usr/bin/chromium-browser").headless(False).auto_port()
@@ -56,6 +109,7 @@ def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
     options.set_argument("--accept-lang=en-US")  # Optional, set language
 
     page = ChromiumPage(addr_or_opts=options)
+    browser_pid = page.browser.process_id
     try:
         logger.debug("Fetch ChromiumPage", extra={'requestUrl': url})
         page.listen.start(targets=url)
@@ -64,11 +118,10 @@ def bypass_cloudflare(url: str, retries: int) -> ChromiumPage:
         logger.debug("Apply bypass to ChromiumPage", extra={'requestUrl': url})
         cf_bypasser = CloudflareBypasser(page, retries, logger)
         cf_bypasser.bypass()
-        return page
-    except Exception as e:
-        page.listen.stop()
-        page.quit()
-        raise e
+        return page, browser_pid
+    except Exception:
+        cleanup(page, browser_pid, None, url)
+        raise
 
 # Endpoint to get Solver response
 @app.post("/v1")
@@ -76,6 +129,10 @@ async def get_solverr(request: ClientRequest):
     from pyvirtualdisplay import Display
     if not is_safe_url(request.url):
         raise HTTPException(status_code=400, detail="Invalid URL")
+
+    display = None
+    page = None
+    browser_pid = None
     try:
         if request.cmd == "request.get":
             logger.info("Trying to solve", extra={'request': request})
@@ -87,9 +144,8 @@ async def get_solverr(request: ClientRequest):
 
             # Start bypass
             logger.debug("Start ByPassing", extra={'requestUrl': request.url})
-            page = bypass_cloudflare(request.url, 5)
+            page, browser_pid = bypass_cloudflare(request.url, 5)
             packet = page.listen.wait()
-            page.listen.stop()
             cookies = page.cookies(as_dict=False)
 
             # Build response
@@ -103,17 +159,13 @@ async def get_solverr(request: ClientRequest):
                 cookies = cookies,
             )
 
-            logger.debug("Closing ChromiumPage and VirtualDisplay", extra={
-                'requestUrl': request.url, 
-                'response_url': packet.response.url
-            })
-            page.quit()
-            display.stop()  # Stop Xvfb
-
             return res
     except Exception as e:
         logger.error("An error occured while solving with error: %s", str(e), stack_info=True, extra={'requestUrl': request.url})
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        logger.debug("Closing ChromiumPage and VirtualDisplay", extra={'requestUrl': request.url})
+        cleanup(page, browser_pid, display, request.url)
 
 
 # Main entry point
