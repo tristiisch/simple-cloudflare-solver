@@ -125,7 +125,7 @@ def bypass_cloudflare(url: str, retries: int) -> tuple[ChromiumPage, int | None]
 
 # Endpoint to get Solver response
 @app.post("/v1")
-async def get_solverr(request: ClientRequest):
+def get_solverr(request: ClientRequest):
     from pyvirtualdisplay import Display
     if not is_safe_url(request.url):
         raise HTTPException(status_code=400, detail="Invalid URL")
